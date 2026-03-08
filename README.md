@@ -139,7 +139,7 @@ portable-ring-buffer/
 
 ```bash
 # Clone
-git clone https://github.com/yourname/portable-ring-buffer
+git clone https://github.com/meugenom/portable-ring-buffer
 cd portable-ring-buffer
 
 # Configure (choose platform: linux / macos / none)
