@@ -1,34 +1,62 @@
 # portable-ring-buffer
 
-> Pure C ring buffer with platform HAL — from bare metal to Linux realtime
+> Pure C ring buffer with platform HAL — from bare metal to Linux realtime;
+> Kendall's Notification Naming;
+> Design by Paradigm from Kleinrock's Queueing Systems, with explicit safety rules and a new $c^2$-based approximation method;
+> Alleen-Cunneen aproximaiton as a ingeneering hybrid for embedded systems;
 
-> **Work in Progress** — API and structure are being defined. Not ready for production use.
+> **Work in Progress** — API and structure are being defined. Not ready.
+
+---
+
+## Status
+
+- [x] [Kendall's Notation and Variability Analysis](docs/Kenndall_Notations.md)
+- [x] [Fall 1: D/D/1/K — Deterministisch, konstante Chunks, konstante Frequenzen, kein Jitter](docs/Fall-1_D_D_1_K.md)
+- [ ] Fall 2: D/G/1/K — Deterministisch, variable Chunks, konstante Frequenzen, kein Jitter
+- [ ] Fall 3: G/D/1/K — Deterministisch, konstante Chunks, variable Frequenzen, kein Jitter
+- [ ] Fall 4: G/G/1/K — Deterministisch, konstante Chunks, konstante Frequenzen, variabler Jitter
+- [ ] Fall 5: G/G/1/K — Deterministisch, variable Chunks, konstante Frequenzen, variabler Jitter
+- [ ] Fall 6: G/G/1/K — Deterministisch, konstante Chunks, variable Frequenzen, variabler Jitter
+- [ ] Fall 7: G/G/1/K — Deterministisch, variable Chunks, variable Frequenzen, variabler Jitter
+
+- [ ] Implementation  mathematical logic to octave code (octave/*.m)
+
+- [ ] Theoretical design and queueing analysis
+
+- [ ] project structure and CMake setup
+
+- [ ] core/ring_buffer.h — API definition
+- [ ] tests/test_core.c — logic tests (TDD)
+- [ ] core/ring_buffer.c — implementation
+
+- [ ] platform/none/platform.c
+- [ ] platform/linux/platform.c
+- [ ] platform/stm32/platform.c
+
+- [ ] tests/test_threaded.cpp
 
 ---
 
 ## Table of Contents
 
+- [Status](#status)
 - [Why this project exists](#why-this-project-exists)
 - [Design constraints](#design-constraints)
-- [Checklist — before writing any ring buffer](#checklist--before-writing-any-ring-buffer)
 - [Planned API](#planned-api)
 - [Planned project structure](#planned-project-structure)
 - [How to build and test](#how-to-build-and-test)
 - [Planned test coverage](#planned-test-coverage)
 - [Target platforms](#target-platforms)
-- [Status](#status)
 - [License](#license)
+- [References](#references)
 
 ---
 
 ## Why this project exists
 
-The challenge was to build a **universal ring buffer** that works not only as an audio buffer,
+The challenge was to build a **ring buffer** that works not only as an audio buffer,
 but as a general-purpose data transport — for any realtime stream on any platform.
-
-Audio playback from **PiperTTS** is just one example. The same buffer must work equally well
-for gyroscope data on **STM32**, UART streams on bare metal, or network packets on Linux —
-without changing a single line of core code.
 
 This forced a clean separation between logic and platform.
 
@@ -47,23 +75,6 @@ YES  pure C99/C11          — compiles everywhere
 YES  static memory         — no leaks possible by design
 YES  platform HAL          — thread safety is swappable per target
 YES  power-of-two capacity — fast index wrap with bitmask
-```
-
----
-
-## Checklist — before writing any ring buffer
-
-Answer these 8 questions first. The implementation follows directly.
-
-```
-1. What is stored?          data type (bytes, frames, structs)
-2. Who produces data?       socket, ISR, microphone, file
-3. Who consumes data?       playback, network, processing
-4. How much to buffer?      size = latency × stream rate
-5. How many producers?      SPSC / MPSC / MPMC → pick thread safety strategy
-6. On overflow?             DROP_NEW / DROP_OLD / BLOCK
-7. On underrun?             SILENCE / BLOCK / error code
-8. Target platform?         bare metal / RTOS / Linux / macOS
 ```
 
 ---
@@ -101,31 +112,36 @@ portable-ring-buffer/
 │
 ├── CMakeLists.txt
 ├── cmake/
-│   ├── stm32.cmake          toolchain file for arm-none-eabi-gcc
-│   └── platform.cmake       platform-specific compile flags
+│   ├── stm32.cmake           toolchain file for arm-none-eabi-gcc
+│   └── posix.cmake           toolchain file for Linux/macOS (optional, uses host compiler by default)
+│
+├── includes/
+│   ├── ring_buffer.h         public API header for users
+│   ├── platform.h            platform HAL header for core implementation
+│   └── ring_buffer_config.h  user configuration (buffer size, data type, etc.)
+│
+├── docs/
+│   ├── Roadmap_Modells_Table_Info.md  design notes and queueing theory roadmap
+│   └── *.md                  future design docs and explanations
 │
 ├── core/
-│   ├── ring_buffer.h       pure C API — no platform includes
-│   └── ring_buffer.c       push / pop / peek / flush / fill_ratio
+│   └── ring_buffer.c         push / pop / peek / flush / fill_ratio
 │
 ├── platform/
-│   ├── platform.h          abstraction: rb_lock(), rb_unlock(), RB_LOG()
-│   ├── linux/
-│   │   └── platform.c      pthread_mutex + printf
-│   ├── macos/
-│   │   └── platform.c      pthread_mutex + printf  (same as linux)
+│   ├── platform.h            abstraction: rb_lock(), rb_unlock(), RB_LOG()
+│   ├── posix/
+│   │   └── platform.c        pthread_mutex + printf (Linux, macOS)  
 │   ├── stm32/
-│   │   └── platform.c      __disable_irq / __enable_irq + UART log
+│   │   └── platform.c        __disable_irq / __enable_irq + UART log
 │   └── none/
-│       └── platform.c      no-op (single thread, bare metal no RTOS)
+│       └── platform.c        no-op (single thread, bare metal no RTOS)
 │
 ├── tests/
-│   ├── test_core.c         logic tests — no threads, runs everywhere
-│   └── test_threaded.cpp   SPSC stress test — Linux / macOS
+│   ├── test_core.c           logic tests — no threads, runs everywhere
+│   └── test_threaded.cpp     SPSC stress test — POSIX(Linux, macOS) only
 │
-├── examples/
-│   ├── audio_piper/        PiperTTS → Unix socket → ring buffer → playback
-│   └── gyroscope_stm32/    gyroscope ISR → ring buffer → processing
+├── examples/   
+│   └── *.c                  example applications (e.g. audio piper) 
 │
 ├── README.md
 └── LICENSE
@@ -138,47 +154,25 @@ portable-ring-buffer/
 > Tests are written before implementation (TDD approach).
 
 ```bash
-# Clone
-git clone https://github.com/meugenom/portable-ring-buffer
-cd portable-ring-buffer
+  # Clone
+  git clone https://github.com/meugenom/portable-ring-buffer
+  cd portable-ring-buffer
 
-# Configure (choose platform: linux / macos / none)
-cmake -B build -DPLATFORM=linux
-cmake --build build
+  # Configure (choose platform: linux / macos / none)
+  cmake -B build -DPLATFORM=linux
+  cmake --build build
 
-# Run tests
-cd build && ctest --output-on-failure
-```
-
-For STM32 (cross-compile):
-```bash
-cmake -B build-stm32 \
-      -DCMAKE_TOOLCHAIN_FILE=cmake/stm32.cmake \
-      -DPLATFORM=stm32
-cmake --build build-stm32
+  # Run tests
+  cd build && ctest --output-on-failure
 ```
 
 ---
 
 ## Planned test coverage
 
-```
-test_core.c
-  ✓ initial state (empty, size=0, fill=0.0)
-  ✓ push one element, pop one element
-  ✓ FIFO order preserved
-  ✓ wraparound across multiple cycles
-  ✓ push until full → RB_ERR_FULL
-  ✓ pop from empty → RB_ERR_EMPTY
-  ✓ peek does not remove element
-  ✓ flush resets buffer
-  ✓ fill_ratio: 0.0 / 0.5 / 1.0
-
-test_threaded.cpp
-  ✓ SPSC: 100,000 frames, producer + consumer threads
-  ✓ all frames received in correct order
-  ✓ no frames lost or duplicated
-  ✓ buffer empty after completion
+```text
+  test_core.c
+  test_threaded.cpp
 ```
 
 ---
@@ -195,16 +189,11 @@ test_threaded.cpp
 
 ---
 
-## Status
+## References
 
-- [ ] core/ring_buffer.h — API definition
-- [ ] tests/test_core.c — logic tests (TDD)
-- [ ] core/ring_buffer.c — implementation
-- [ ] platform/none/platform.c
-- [ ] platform/linux/platform.c
-- [ ] platform/stm32/platform.c
-- [ ] tests/test_threaded.cpp
-- [ ] examples/audio_piper
+- Kleinrock, L. (1975). *Queueing Systems, Vol. 1: Theory*.
+- Allen, A. O. (1990). *Probability, Statistics, and Queueing Theory*.
+- Little, J. D. C. (1961). A Proof for the Queuing Formula $L = \lambda W$. *Operations Research*
 
 ---
 
